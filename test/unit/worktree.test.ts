@@ -397,6 +397,27 @@ console.log(JSON.stringify({ action: "created", branch, path: repo, created_bran
 		}
 	});
 
+	it("creates worktrees under a git-ignored root in the main checkout, from the checkout and from its linked worktrees", async () => {
+		const repoDir = fs.realpathSync(createRepo("pi-worktree-in-repo-"));
+		const root = path.join(repoDir, ".worktrees");
+		fs.appendFileSync(path.join(repoDir, ".git", "info", "exclude"), ".worktrees/\n");
+		const parentWorktree = path.join(root, "parent");
+		const setups: WorktreeSetup[] = [];
+		try {
+			setups.push(await createWorktrees(repoDir, "main", 1, { baseDir: ".worktrees", provider: "native" }));
+			git(repoDir, ["worktree", "add", "-q", "-b", "parent", parentWorktree]);
+			setups.push(await createWorktrees(parentWorktree, "linked", 1, { baseDir: ".worktrees", provider: "native" }));
+			assert.deepEqual(
+				setups.map((setup) => fs.realpathSync(setup.worktrees[0]!.path)),
+				[path.join(root, path.basename(repoDir), "pi-worktree-main-0"), path.join(root, path.basename(repoDir), "pi-worktree-linked-0")],
+			);
+			assert.equal(git(repoDir, ["status", "--porcelain"]), "");
+		} finally {
+			for (const setup of setups) cleanupWorktrees(setup);
+			cleanupRepo(repoDir);
+		}
+	});
+
 	it("rejects worktree base directories inside Pi extensions", async () => {
 		const repoDir = createRepo("pi-worktree-extension-dir-");
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "pi-worktree-home-"));
