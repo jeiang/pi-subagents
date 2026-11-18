@@ -15,7 +15,7 @@ import type {
 } from "../../shared/types.ts";
 import { getAgentDir } from "../../shared/utils.ts";
 import { isTerminalParallelHandoffChildStatus, readParallelHandoffManifest } from "./parallel-handoff.ts";
-import { MACHINE_DIFF_OPTIONS, isWorktreeCleanupTaskDone, validateWorktreePatchRepresentsCurrentWorktree } from "./worktree.ts";
+import { MACHINE_DIFF_OPTIONS, isWorktreeCleanupTaskDone, mainCheckoutRoot, validateWorktreePatchRepresentsCurrentWorktree } from "./worktree.ts";
 
 export const WORKTREE_CLEANUP_PLAN_VERSION = 1 as const;
 export const WORKTREE_CLEANUP_PLAN_TTL_MS = 30 * 60 * 1000;
@@ -256,9 +256,9 @@ function resolveCleanupBaseDir(repoRoot: string, configuredBaseDir: string | und
 		const trimmed = raw.trim();
 		if (!trimmed) throw new Error("worktree base directory cannot be empty");
 		const expanded = trimmed.startsWith("~/") ? path.join(os.homedir(), trimmed.slice(2)) : trimmed;
-		dedicatedRoot = path.isAbsolute(expanded) ? expanded : path.resolve(repoRoot, expanded);
+		dedicatedRoot = path.isAbsolute(expanded) ? expanded : path.resolve(mainCheckoutRoot(repoRoot), expanded);
 	}
-	return path.resolve(path.join(dedicatedRoot, path.basename(repoRoot)));
+	return path.resolve(path.join(dedicatedRoot, path.basename(mainCheckoutRoot(repoRoot))));
 }
 
 function cleanupContainmentInvalid(repoRoot: string, projectDir: string): boolean {

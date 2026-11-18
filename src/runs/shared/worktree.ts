@@ -673,7 +673,7 @@ function resolveWorktreeDedicatedRoot(configuredBaseDir: string | undefined, rep
 		if (!trimmed) throw new Error("worktree base directory cannot be empty");
 
 		const candidate = trimmed.startsWith("~/") ? path.join(os.homedir(), trimmed.slice(2)) : trimmed;
-		expanded = path.isAbsolute(candidate) ? candidate : path.resolve(repoRoot, candidate);
+		expanded = path.isAbsolute(candidate) ? candidate : path.resolve(mainCheckoutRoot(repoRoot), candidate);
 	}
 	const extensionsDir = normalizeComparableCwd(path.join(getAgentDir(), "extensions"));
 	if (isPathInside(extensionsDir, normalizeComparableCwd(expanded))) {
@@ -682,8 +682,18 @@ function resolveWorktreeDedicatedRoot(configuredBaseDir: string | undefined, rep
 	return expanded;
 }
 
+/**
+ * The main checkout of `repoRoot`'s repository, so children of a session that
+ * already runs in a linked worktree share one dedicated root and project name.
+ */
+export function mainCheckoutRoot(repoRoot: string): string {
+	const common = runGit(repoRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+	const commonDir = common.status === 0 ? common.stdout.trim() : "";
+	return commonDir && path.basename(commonDir) === ".git" ? path.dirname(commonDir) : repoRoot;
+}
+
 function buildNativeProjectPath(dedicatedRoot: string, repoRoot: string): string {
-	return path.join(dedicatedRoot, path.basename(repoRoot));
+	return path.join(dedicatedRoot, path.basename(mainCheckoutRoot(repoRoot)));
 }
 
 /**
@@ -727,7 +737,8 @@ function assertSafeWorktreeLocation(worktreePath: string, repoRoot: string, dedi
 	if (isPathInside(extensionsDir, projectDir) || isPathInside(extensionsDir, resolvedLeaf)) {
 		throw new Error(`worktree path cannot be inside Pi extensions directory: ${extensionsDir}. Choose a directory outside it.`);
 	}
-	if (isPathInside(resolvedRepoRoot, resolvedLeaf)) {
+	// A git-ignored root inside the checkout (such as `.worktrees/`) stays out of status, diffs, and cleanliness checks.
+	if (isPathInside(resolvedRepoRoot, resolvedLeaf) && runGit(resolvedRepoRoot, ["check-ignore", "-q", resolvedLeaf]).status !== 0) {
 		throw new Error(`worktree path would land inside the repository checkout: ${resolvedLeaf}`);
 	}
 	if (leafParent === repoParent) {
